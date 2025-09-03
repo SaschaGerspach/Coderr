@@ -1,10 +1,11 @@
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.validators import validate_email
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
 User = get_user_model()
+
 
 class RegistrationSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)
@@ -26,7 +27,8 @@ class RegistrationSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         if attrs["password"] != attrs["repeated_password"]:
-            raise serializers.ValidationError({"repeated_password": _("Passwords do not match.")})
+            raise serializers.ValidationError(
+                {"repeated_password": _("Passwords do not match.")})
         validate_password(attrs["password"])
         return attrs
 
@@ -38,3 +40,18 @@ class RegistrationSerializer(serializers.Serializer):
         user.set_password(raw_password)
         user.save()
         return user
+
+
+class LoginSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        user = authenticate(username=attrs.get("username"),
+                            password=attrs.get("password"))
+        if not user:
+            raise serializers.ValidationError(
+                {"detail": "Invalid Credentials"})
+        attrs["user"] = user
+
+        return attrs
