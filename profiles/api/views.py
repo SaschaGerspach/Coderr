@@ -1,4 +1,3 @@
-# profiles/api/views.py
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
@@ -45,3 +44,15 @@ class ProfileView(generics.RetrieveUpdateAPIView):
 
         # GET: lesen, 404 wenn nicht vorhanden
         return get_object_or_404(self.queryset, user_id=user_id)
+
+
+class BusinessProfileListView(generics.ListAPIView):
+    """
+    GET /api/profiles/business/
+    Gibt eine Liste aller Business-Profile zurück (nur authentifizierte Nutzer).
+    """
+    serializer_class = ProfileDetailSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Profile.objects.select_related("user").filter(type="business")
