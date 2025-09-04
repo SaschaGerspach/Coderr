@@ -3,6 +3,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
+from profiles.models import Profile
 
 from .serializers import RegistrationSerializer, LoginSerializer
 from .permissions import AllowAnyRegistration, AllowedAnyLogin
@@ -19,6 +20,8 @@ class RegistrationView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         user = serializer.save()
+        profile_type = serializer.validated_data.get("type", "")
+        Profile.objects.get_or_create(user=user, defaults={"type": profile_type})
         token, _ = Token.objects.get_or_create(user=user)
 
         data = {

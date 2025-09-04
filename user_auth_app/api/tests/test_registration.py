@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase, APIClient
+from profiles.models import Profile
 
 User = get_user_model()
 
@@ -69,3 +70,19 @@ class RegistrationTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         for f in ("email", "password", "repeated_password", "type"):
             self.assertIn(f, resp.data)
+
+    def test_registration_creates_profile_with_type(self):
+        payload = {
+            "username": "reg_user",
+            "email": "reg@mail.de",
+            "password": "StrongPassw0rd!",
+            "repeated_password": "StrongPassw0rd!",
+            "type": "business",
+        }
+        resp = self.client.post(self.url, payload, format="json")
+        self.assertEqual(resp.status_code, 201)
+        user_id = resp.data["user_id"]
+
+        # Profil existiert und hat den Type übernommen
+        prof = Profile.objects.get(user_id=user_id)
+        self.assertEqual(prof.type, "business")

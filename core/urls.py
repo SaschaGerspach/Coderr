@@ -22,6 +22,6 @@ urlpatterns = [
     # path("api/", include("common.urls")),
     # path("api/", include("offers.urls")),
     # path("api/", include("orders.urls")),
-    # path("api/", include("profiles.urls")),
+    path("api/", include("profiles.api.urls")),
     path('api/', include('user_auth_app.api.urls')),
 ]
