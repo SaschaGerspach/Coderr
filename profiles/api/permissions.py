@@ -11,3 +11,6 @@ class IsProfileOwner(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return request.user.is_authenticated and obj.user_id == request.user.id
+    
+
+

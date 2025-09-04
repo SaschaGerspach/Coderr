@@ -1,6 +1,6 @@
 from django.urls import path
-from .views import ProfilePartialUpdateView
+from .views import ProfileView
 
 urlpatterns = [
-    path("profile/<int:pk>/", ProfilePartialUpdateView.as_view(), name="profile-partial-update"),
+    path("profile/<int:pk>/", ProfileView.as_view(), name="profile"),
 ]

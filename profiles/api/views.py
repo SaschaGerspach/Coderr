@@ -1,46 +1,47 @@
-from django.http import Http404
+# profiles/api/views.py
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied, NotAuthenticated
-
+from rest_framework.exceptions import PermissionDenied
 from ..models import Profile
-from .serializers import ProfilePatchSerializer
+from .serializers import ProfileDetailSerializer, ProfilePatchSerializer
 from .permissions import IsProfileOwner
 
-class ProfilePartialUpdateView(generics.UpdateAPIView):
+class ProfileView(generics.RetrieveUpdateAPIView):
     """
-    PATCH /api/profile/{pk}/
-    pk = User-ID, dessen Profil aktualisiert werden soll.
+    GET  /api/profile/{pk}/   -> Profil lesen (auth erforderlich)
+    PATCH /api/profile/{pk}/  -> eigenes Profil aktualisieren (Owner-only, auto-create)
+    pk = User-ID
     """
-    serializer_class = ProfilePatchSerializer
-    permission_classes = [permissions.IsAuthenticated, IsProfileOwner]
-    http_method_names = ["patch"]
+    queryset = Profile.objects.select_related("user")
+
+    # Standard: GET
+    serializer_class = ProfileDetailSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method == "PATCH":
+            return [permissions.IsAuthenticated(), IsProfileOwner()]
+        return [permissions.IsAuthenticated()]
+
+    def get_serializer_class(self):
+        if self.request.method == "PATCH":
+            return ProfilePatchSerializer
+        return ProfileDetailSerializer
 
     def get_object(self):
-        user_id = int(self.kwargs.get("pk"))
+        user_id = int(self.kwargs["pk"])
 
-        # 1) Erst die Auth/Own-Check – verhindert User/Profil-Enumeration
-        if not self.request.user.is_authenticated:
-            # Das fängt DRF i.d.R. schon vorher ab (IsAuthenticated), aber der Vollständigkeit halber:
-            raise NotAuthenticated()
-        if self.request.user.id != user_id:
-            # Nicht der Owner → sofort 403, ohne DB-Lookup
-            raise PermissionDenied("Du darfst nur dein eigenes Profil bearbeiten.")
+        if self.request.method == "PATCH":
+            # Nicht-Owner sofort blocken (kein Leak, ob es das Profil gibt)
+            if self.request.user.id != user_id:
+                raise PermissionDenied("Du darfst nur dein eigenes Profil bearbeiten.")
+            try:
+                obj = self.queryset.get(user_id=user_id)
+            except Profile.DoesNotExist:
+                obj = Profile.objects.create(user=self.request.user)  # lazy-create nur für Owner
+            self.check_object_permissions(self.request, obj)
+            return obj
 
-        # 2) Owner: Profil holen oder "lazy-create"
-        try:
-            obj = Profile.objects.select_related("user").get(user_id=user_id)
-        except Profile.DoesNotExist:
-            obj = Profile.objects.create(user=self.request.user)
-
-        # 3) Objekt-Permissions (bleibt, ist jetzt aber nur noch Owner)
-        self.check_object_permissions(self.request, obj)
-        return obj
-
-    def patch(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        # GET: lesen, 404 wenn nicht vorhanden
+        return get_object_or_404(self.queryset, user_id=user_id)

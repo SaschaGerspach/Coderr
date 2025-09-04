@@ -61,3 +61,38 @@ class ProfilePatchSerializer(serializers.ModelSerializer):
             if data.get(key) is None:
                 data[key] = ""
         return data
+    
+class ProfileDetailSerializer(serializers.ModelSerializer):
+    # User-Felder als Read-Only
+    username   = serializers.CharField(source="user.username", read_only=True)
+    first_name = serializers.CharField(source="user.first_name", read_only=True, allow_blank=True)
+    last_name  = serializers.CharField(source="user.last_name", read_only=True, allow_blank=True)
+    email      = serializers.EmailField(source="user.email", read_only=True)
+
+    class Meta:
+        model = Profile
+        fields = [
+            "user",
+            "username",
+            "first_name",
+            "last_name",
+            "file",
+            "location",
+            "tel",
+            "description",
+            "working_hours",
+            "type",
+            "email",
+            "created_at",
+        ]
+        read_only_fields = fields  # rein lesend
+
+    # Spez: bestimmte Felder dürfen nicht null sein → "" statt None
+    _no_null = {"first_name", "last_name", "location", "tel", "description", "working_hours"}
+
+    def to_representation(self, instance: Profile):
+        data = super().to_representation(instance)
+        for key in self._no_null:
+            if data.get(key) is None:
+                data[key] = ""
+        return data

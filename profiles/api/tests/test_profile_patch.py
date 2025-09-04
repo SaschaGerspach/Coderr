@@ -30,8 +30,8 @@ class ProfilePatchTests(APITestCase):
 
         self.client_anon = APIClient()
 
-        self.url_owner = reverse("profile-partial-update", kwargs={"pk": self.user_a.id})
-        self.url_other = reverse("profile-partial-update", kwargs={"pk": self.user_b.id})
+        self.url_owner = reverse("profile", kwargs={"pk": self.user_a.id})
+        self.url_other = reverse("profile", kwargs={"pk": self.user_b.id})
 
     def test_owner_can_patch_profile(self):
         payload = {
@@ -100,7 +100,7 @@ class ProfilePatchLazyCreateTests(APITestCase):
         # hier ABSICHTLICH KEIN Profile anlegen (lazy-create testen)
         self.client_auth = APIClient()
         self.client_auth.credentials(HTTP_AUTHORIZATION="Token " + Token.objects.create(user=self.user).key)
-        self.url = reverse("profile-partial-update", kwargs={"pk": self.user.id})
+        self.url = reverse("profile", kwargs={"pk": self.user.id})
 
     def test_owner_patch_creates_profile_if_missing(self):
         self.assertFalse(Profile.objects.filter(user=self.user).exists())  # Vorbedingung
@@ -138,7 +138,7 @@ class ProfilePatchPermissionTests(APITestCase):
         self.admin_client.credentials(HTTP_AUTHORIZATION="Token " + Token.objects.create(user=self.admin_user).key)
 
         # URL auf Profil von user_b
-        self.url_user_b = reverse("profile-partial-update", kwargs={"pk": self.user_b.id})
+        self.url_user_b = reverse("profile", kwargs={"pk": self.user_b.id})
 
     def test_staff_cannot_patch_foreign_profile(self):
         resp = self.staff_client.patch(self.url_user_b, {"location": "Berlin"}, format="json")
@@ -162,7 +162,7 @@ class ProfilePatchExistencePolicyTests(APITestCase):
         user_b = User.objects.create_user(username="owner_b", email="b@mail.de", password="Pass123!")
         client_b = APIClient()
         client_b.credentials(HTTP_AUTHORIZATION="Token " + Token.objects.create(user=user_b).key)
-        url = reverse("profile-partial-update", kwargs={"pk": user_b.id})
+        url = reverse("profile", kwargs={"pk": user_b.id})
 
         resp = client_b.patch(url, {"location": "Berlin"}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
@@ -170,13 +170,13 @@ class ProfilePatchExistencePolicyTests(APITestCase):
 
     def test_non_owner_never_learns_existence(self):
         # Authentifizierter Nicht-Owner → immer 403 (egal ob Profil existiert)
-        url_nonexistent = reverse("profile-partial-update", kwargs={"pk": 999999})
+        url_nonexistent = reverse("profile", kwargs={"pk": 999999})
         resp = self.client_owner_a.patch(url_nonexistent, {"location": "Bremen"}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_unauthenticated_gets_401_before_lookup(self):
         # Unauthentifiziert → 401
         anon = APIClient()
-        url = reverse("profile-partial-update", kwargs={"pk": self.user_a.id})
+        url = reverse("profile", kwargs={"pk": self.user_a.id})
         resp = anon.patch(url, {"location": "Köln"}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
