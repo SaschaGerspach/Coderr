@@ -96,3 +96,69 @@ class ProfileDetailSerializer(serializers.ModelSerializer):
             if data.get(key) is None:
                 data[key] = ""
         return data
+
+from rest_framework import serializers
+from ..models import Profile
+
+class BusinessProfileListSerializer(serializers.ModelSerializer):
+    username   = serializers.CharField(source="user.username", read_only=True)
+    first_name = serializers.CharField(source="user.first_name", read_only=True, allow_blank=True)
+    last_name  = serializers.CharField(source="user.last_name", read_only=True, allow_blank=True)
+
+    class Meta:
+        model = Profile
+        fields = [
+            "user",
+            "username",
+            "first_name",
+            "last_name",
+            "file",
+            "location",
+            "tel",
+            "description",
+            "working_hours",
+            "type",
+        ]
+
+    # nie null -> leere Strings
+    _no_null = {"first_name", "last_name", "location", "tel", "description", "working_hours"}
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        for k in self._no_null:
+            if data.get(k) is None:
+                data[k] = ""
+        return data
+
+
+class CustomerProfileListSerializer(serializers.ModelSerializer):
+    username    = serializers.CharField(source="user.username", read_only=True)
+    first_name  = serializers.CharField(source="user.first_name", read_only=True, allow_blank=True)
+    last_name   = serializers.CharField(source="user.last_name", read_only=True, allow_blank=True)
+    uploaded_at = serializers.DateTimeField(
+        source="created_at",
+        read_only=True,
+        format="%Y-%m-%dT%H:%M:%S",
+    )# Spec: uploaded_at
+
+    class Meta:
+        model = Profile
+        fields = [
+            "user",
+            "username",
+            "first_name",
+            "last_name",
+            "file",
+            "uploaded_at",
+            "type",
+        ]
+
+    # Felder dürfen nie null sein → leere Strings statt None
+    _no_null = {"first_name", "last_name", "type"}
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        for k in self._no_null:
+            if data.get(k) is None:
+                data[k] = ""
+        return data

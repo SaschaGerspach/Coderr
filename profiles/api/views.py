@@ -1,9 +1,10 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from ..models import Profile
-from .serializers import ProfileDetailSerializer, ProfilePatchSerializer
+from .serializers import ProfileDetailSerializer, ProfilePatchSerializer, BusinessProfileListSerializer, CustomerProfileListSerializer
 from .permissions import IsProfileOwner
 
 class ProfileView(generics.RetrieveUpdateAPIView):
@@ -20,8 +21,8 @@ class ProfileView(generics.RetrieveUpdateAPIView):
 
     def get_permissions(self):
         if self.request.method == "PATCH":
-            return [permissions.IsAuthenticated(), IsProfileOwner()]
-        return [permissions.IsAuthenticated()]
+            return [IsAuthenticated(), IsProfileOwner()]
+        return [IsAuthenticated()]
 
     def get_serializer_class(self):
         if self.request.method == "PATCH":
@@ -51,8 +52,20 @@ class BusinessProfileListView(generics.ListAPIView):
     GET /api/profiles/business/
     Gibt eine Liste aller Business-Profile zurück (nur authentifizierte Nutzer).
     """
-    serializer_class = ProfileDetailSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = BusinessProfileListSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return Profile.objects.select_related("user").filter(type="business")
+    
+
+class CustomerProfileListView(generics.ListAPIView):
+    """
+    GET /api/profiles/customers/
+    Liste aller Customer-Profile (auth erforderlich).
+    """
+    serializer_class = CustomerProfileListSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Profile.objects.select_related("user").filter(type="customer")
