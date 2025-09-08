@@ -1,14 +1,17 @@
 from decimal import Decimal, InvalidOperation
 
 from django.db.models import Min, Q
-from rest_framework import generics
+from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.response import Response
+
 
 from offers.models import Offer
-from .serializers import OfferSerializer, OfferListSerializer, OfferDetailViewSerializer
-from .permissions import IsBusinessUser
+from .serializers import OfferSerializer, OfferListSerializer, OfferDetailViewSerializer, OfferPatchSerializer
+from .permissions import IsBusinessUser, IsOfferOwner
+
 
 
 class OffersPagination(PageNumberPagination):
@@ -94,18 +97,47 @@ class OfferListCreateAPIView(generics.ListCreateAPIView):
         return qs
     
 
-class OfferRetrieveAPIView(generics.RetrieveAPIView):
+
+class OfferRetrieveUpdateAPIView(generics.RetrieveUpdateAPIView):
     """
-    GET /api/offers/{id}/
+    GET    /api/offers/{id}/  -> Detail (Auth nötig)
+    PATCH  /api/offers/{id}/  -> nur Owner (Auth + IsOfferOwner), partielle Aktualisierung
     """
     queryset = Offer.objects.all().select_related("owner").prefetch_related("details")
-    serializer_class = OfferDetailViewSerializer
-    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method in ["PATCH", "PUT"]:
+            return [IsAuthenticated(), IsOfferOwner()]
+        return [IsAuthenticated()]
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        return qs.annotate(
+        # Annotationen für min_price / min_delivery_time
+        return super().get_queryset().annotate(
             _min_price=Min("details__price"),
             _min_delivery=Min("details__delivery_time_in_days"),
         )
+
+    def get_serializer_class(self):
+        # Für GET liefern wir die Detail-Ausgabe mit min_price/min_delivery_time + absolute URLs
+        if self.request.method == "GET":
+            return OfferDetailViewSerializer
+        # Für PATCH verarbeiten wir nur Input-Felder (OfferPatchSerializer) …
+        if self.request.method in ["PATCH", "PUT"]:
+            return OfferPatchSerializer
+        return OfferDetailViewSerializer
+
+    def update(self, request, *args, **kwargs):
+        """
+        Nach erfolgreichem Update geben wir die vollständige Offer-Representation zurück,
+        wie in der Spec gefordert (unabhängig davon, was im Request stand).
+        """
+        partial = kwargs.pop('partial', True)  # PATCH ist partial
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        # Re-serialize mit Voll-Serializer (wie POST-Response)
+        full = OfferSerializer(instance, context={"request": request})
+        return Response(full.data, status=status.HTTP_200_OK)
 

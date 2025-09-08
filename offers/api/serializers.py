@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.db import transaction
 from rest_framework import serializers
 
@@ -203,3 +204,96 @@ class OfferDetailViewSerializer(serializers.ModelSerializer):
         return int(v) if v is not None else None
 
 
+class OfferDetailPartialSerializer(serializers.Serializer):
+    """
+    Serializer für EIN Detail-Update in PATCH.
+    - offer_type: Pflicht zur Identifikation (basic/standard/premium)
+    - alle anderen Felder optional (partial update)
+    - 'id' darf mitgegeben werden, MUSS aber zum gefundenen Detail passen, sonst 400
+    """
+    id = serializers.IntegerField(required=False)
+    offer_type = serializers.ChoiceField(choices=[c[0] for c in OfferDetail.OfferType.choices])
+    title = serializers.CharField(max_length=200, required=False)
+    revisions = serializers.IntegerField(min_value=0, required=False)
+    delivery_time_in_days = serializers.IntegerField(min_value=1, required=False)
+    price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0"), required=False)
+    features = serializers.ListField(
+        child=serializers.CharField(), required=False
+    )
+
+    def validate_features(self, v):
+        # leere Liste ist erlaubt, None kommt hier nicht an, weil required=False
+        if not isinstance(v, list):
+            raise serializers.ValidationError("features must be an array of strings.")
+        for x in v:
+            if not isinstance(x, str):
+                raise serializers.ValidationError("All features must be strings.")
+        return v
+
+
+class OfferPatchSerializer(serializers.ModelSerializer):
+    """
+    PATCH-Serializer für Offer:
+    - erlaubt partielle Updates an Offer-Feldern (title, image, description)
+    - 'details' kann eine Liste von Änderungen enthalten; jede Änderung referenziert per offer_type
+    - nach update() geben wir das vollständige Offer (mit allen Details) über den View zurück
+    """
+    details = OfferDetailPartialSerializer(many=True, required=False)
+
+    class Meta:
+        model = Offer
+        fields = ["title", "image", "description", "details"]
+        extra_kwargs = {
+            "image": {"required": False, "allow_null": True},
+            "description": {"required": False, "allow_blank": True},
+        }
+
+    def validate(self, attrs):
+        # Kein spezielles Offer-Validierungs-Requirement über die Spec hinaus
+        return attrs
+
+    @transaction.atomic
+    def update(self, instance: Offer, validated_data):
+        details_updates = validated_data.pop("details", None)
+
+        # 1) Offer-Felder partiell setzen
+        for field in ["title", "image", "description"]:
+            if field in validated_data:
+                setattr(instance, field, validated_data[field])
+        instance.save()
+
+        # 2) Details partiell updaten (falls mitgegeben)
+        if details_updates:
+            # Map vorhandene Details nach offer_type
+            existing_by_type = {d.offer_type: d for d in instance.details.all()}
+
+            for payload in details_updates:
+                offer_type = payload.get("offer_type")
+                if not offer_type:
+                    raise serializers.ValidationError({"details": "Each detail must include offer_type."})
+
+                detail = existing_by_type.get(offer_type)
+                if detail is None:
+                    raise serializers.ValidationError(
+                        {"details": f"Detail with offer_type '{offer_type}' does not exist for this offer."}
+                    )
+
+                # Wenn eine 'id' mitkommt, muss sie zum gefundenen Detail passen
+                if "id" in payload and payload["id"] != detail.id:
+                    raise serializers.ValidationError(
+                        {"details": f"Detail id mismatch for offer_type '{offer_type}'."}
+                    )
+
+                # 'offer_type' selbst darf nicht geändert werden (wird ignoriert)
+                update_fields = {}
+                for f in ["title", "revisions", "delivery_time_in_days", "price", "features"]:
+                    if f in payload:
+                        setattr(detail, f, payload[f])
+                        update_fields[f] = True
+
+                if update_fields:
+                    # nur geänderte Felder speichern
+                    detail.save(update_fields=list(update_fields.keys()))
+
+        # Rückgabe der aktualisierten Instanz – die View serialisiert mit dem Voll-Serializer
+        return instance

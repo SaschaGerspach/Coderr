@@ -50,3 +50,15 @@ class IsBusinessUser(BasePermission):
             return False
 
         return True
+    
+class IsOfferOwner(BasePermission):
+    """
+    Erlaubt Änderungen (PATCH) nur dem Owner des Angebots.
+    GET ist von deiner Detail-View ohnehin separat geregelt (IsAuthenticated),
+    daher greift diese Permission nur, wenn die View sie für PATCH anfordert.
+    """
+    message = "Only the offer owner can modify this offer."
+
+    def has_object_permission(self, request, view, obj):
+        # obj ist ein Offer
+        return request.user.is_authenticated and obj.owner_id == request.user.id
