@@ -1,19 +1,94 @@
-from rest_framework import generics, status
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from decimal import Decimal, InvalidOperation
 
-from ..models import Offer
-from .serializers import OfferSerializer
+from django.db.models import Min, Q
+from rest_framework import generics
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.exceptions import ValidationError
+from rest_framework.pagination import PageNumberPagination
+
+from offers.models import Offer
+from .serializers import OfferSerializer, OfferListSerializer
 from .permissions import IsBusinessUser
 
 
-class OfferCreateAPIView(generics.CreateAPIView):
-    queryset = Offer.objects.all()
-    serializer_class = OfferSerializer
-    permission_classes = [IsAuthenticated, IsBusinessUser]
+class OffersPagination(PageNumberPagination):
+    page_size = 10  # Default
+    page_size_query_param = "page_size"
+    max_page_size = 100  # Safety-Cap
 
-    def create(self, request, *args, **kwargs):
-        """
-        Überschrieben, um 201 + Response exakt wie Spec zu liefern.
-        """
-        return super().create(request, *args, **kwargs)
+
+class OfferListCreateAPIView(generics.ListCreateAPIView):
+    """
+    GET /api/offers/  -> paginierte Liste
+    POST /api/offers/ -> wie zuvor (nur Business, Owner aus request.user)
+    """
+    queryset = Offer.objects.all().select_related("owner").prefetch_related("details")
+    pagination_class = OffersPagination
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated(), IsBusinessUser()]
+        return [AllowAny()]
+
+    def get_serializer_class(self):
+        if self.request.method == "GET":
+            return OfferListSerializer
+        return OfferSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+
+        # Annotationen für min_price / min_delivery_time
+        qs = qs.annotate(
+            _min_price=Min("details__price"),
+            _min_delivery=Min("details__delivery_time_in_days"),
+        )
+
+        # Query-Params auslesen
+        params = self.request.query_params
+
+        # creator_id
+        creator_id = params.get("creator_id")
+        if creator_id is not None:
+            if not creator_id.isdigit():
+                raise ValidationError({"creator_id": "Must be an integer."})
+            qs = qs.filter(owner_id=int(creator_id))
+
+        # min_price
+        min_price = params.get("min_price")
+        if min_price is not None:
+            try:
+                mp = Decimal(min_price)
+            except (InvalidOperation, TypeError):
+                raise ValidationError({"min_price": "Must be a number."})
+            qs = qs.filter(_min_price__gte=mp)
+
+        # max_delivery_time
+        max_delivery_time = params.get("max_delivery_time")
+        if max_delivery_time is not None:
+            if not max_delivery_time.isdigit():
+                raise ValidationError({"max_delivery_time": "Must be an integer."})
+            qs = qs.filter(_min_delivery__lte=int(max_delivery_time))
+
+        # search in title/description
+        search = params.get("search")
+        if search:
+            qs = qs.filter(Q(title__icontains=search) | Q(description__icontains=search))
+
+        # ordering: updated_at oder min_price
+        ordering = params.get("ordering")
+        if ordering:
+            allowed = {"updated_at", "min_price", "-updated_at", "-min_price"}
+            if ordering not in allowed:
+                raise ValidationError(
+                    {"ordering": "Allowed values: updated_at, -updated_at, min_price, -min_price."}
+                )
+            # Map 'min_price' auf annotiertes Feld
+            if "min_price" in ordering:
+                ordering = ordering.replace("min_price", "_min_price")
+            qs = qs.order_by(ordering)
+        else:
+            # falls nichts angegeben, lass Default-Ordering der Model.Meta oder _min_price
+            qs = qs.order_by("-updated_at", "id")
+
+        return qs

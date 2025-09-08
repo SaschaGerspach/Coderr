@@ -95,3 +95,60 @@ class OfferSerializer(serializers.ModelSerializer):
         for d in details_data:
             OfferDetail.objects.create(offer=offer, **d)
         return offer
+
+
+class OfferDetailMiniSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OfferDetail
+        fields = ["id", "url"]
+
+    def get_url(self, obj):
+        # Laut Spec: "/offerdetails/<id>/"
+        return f"/offerdetails/{obj.id}/"
+
+
+class OfferListSerializer(serializers.ModelSerializer):
+    # user = Owner-ID
+    user = serializers.SerializerMethodField()
+    details = OfferDetailMiniSerializer(many=True, read_only=True)
+    min_price = serializers.SerializerMethodField()
+    min_delivery_time = serializers.SerializerMethodField()
+    user_details = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Offer
+        fields = [
+            "id",
+            "user",
+            "title",
+            "image",
+            "description",
+            "created_at",
+            "updated_at",
+            "details",
+            "min_price",
+            "min_delivery_time",
+            "user_details",
+        ]
+
+    def get_user(self, obj):
+        return obj.owner_id
+    
+    def get_min_price(self, obj):
+        v = getattr(obj, "_min_price", None)
+        # float sorgt für saubere JSON-Serialisierung (100.0 etc.)
+        return float(v) if v is not None else None
+
+    def get_min_delivery_time(self, obj):
+        v = getattr(obj, "_min_delivery", None)
+        return int(v) if v is not None else None
+
+    def get_user_details(self, obj):
+        user = obj.owner
+        return {
+            "first_name": user.first_name or "",
+            "last_name": user.last_name or "",
+            "username": user.username or "",
+        }
