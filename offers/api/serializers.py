@@ -152,3 +152,54 @@ class OfferListSerializer(serializers.ModelSerializer):
             "last_name": user.last_name or "",
             "username": user.username or "",
         }
+    
+
+class OfferDetailMiniAbsSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OfferDetail
+        fields = ["id", "url"]
+
+    def get_url(self, obj):
+        request = self.context.get("request")
+        # Spec verlangt absolute URL im Detail-Endpoint
+        if request:
+            return request.build_absolute_uri(f"/api/offerdetails/{obj.id}/")
+        return f"/api/offerdetails/{obj.id}/"
+        
+
+class OfferDetailViewSerializer(serializers.ModelSerializer):
+    user = serializers.SerializerMethodField()
+    # wichtig: hier die *absolute* Variante nutzen
+    details = OfferDetailMiniAbsSerializer(many=True, read_only=True)
+    min_price = serializers.SerializerMethodField()
+    min_delivery_time = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Offer
+        fields = [
+            "id",
+            "user",
+            "title",
+            "image",
+            "description",
+            "created_at",
+            "updated_at",
+            "details",
+            "min_price",
+            "min_delivery_time",
+        ]
+
+    def get_user(self, obj):
+        return obj.owner_id
+
+    def get_min_price(self, obj):
+        v = getattr(obj, "_min_price", None)
+        return float(v) if v is not None else None
+
+    def get_min_delivery_time(self, obj):
+        v = getattr(obj, "_min_delivery", None)
+        return int(v) if v is not None else None
+
+

@@ -7,7 +7,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
 
 from offers.models import Offer
-from .serializers import OfferSerializer, OfferListSerializer
+from .serializers import OfferSerializer, OfferListSerializer, OfferDetailViewSerializer
 from .permissions import IsBusinessUser
 
 
@@ -92,3 +92,20 @@ class OfferListCreateAPIView(generics.ListCreateAPIView):
             qs = qs.order_by("-updated_at", "id")
 
         return qs
+    
+
+class OfferRetrieveAPIView(generics.RetrieveAPIView):
+    """
+    GET /api/offers/{id}/
+    """
+    queryset = Offer.objects.all().select_related("owner").prefetch_related("details")
+    serializer_class = OfferDetailViewSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return qs.annotate(
+            _min_price=Min("details__price"),
+            _min_delivery=Min("details__delivery_time_in_days"),
+        )
+
