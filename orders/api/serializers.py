@@ -65,3 +65,8 @@ class OrderOutputSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+class OrderStatusPatchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        fields = ["status"] 

@@ -5,8 +5,8 @@ from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 
 from orders.models import Order
-from .serializers import OrderCreateSerializer, OrderOutputSerializer
-from .permissions import IsCustomerUser
+from .serializers import OrderCreateSerializer, OrderOutputSerializer, OrderStatusPatchSerializer
+from .permissions import IsCustomerUser, IsOrderBusinessUser
 
 
 class OrderListCreateAPIView(generics.ListCreateAPIView):
@@ -62,3 +62,37 @@ class OrderListCreateAPIView(generics.ListCreateAPIView):
         order = serializer.save()
         out = OrderOutputSerializer(order)
         return Response(out.data, status=status.HTTP_201_CREATED)
+
+class OrderStatusUpdateAPIView(generics.UpdateAPIView):
+    """
+    PATCH /api/orders/{id}/
+    - nur Status änderbar
+    - nur business_user dieser Order & Profil-Typ 'business'
+    """
+    queryset = Order.objects.all().select_related("customer_user", "business_user")
+    serializer_class = OrderStatusPatchSerializer
+    permission_classes = [IsAuthenticated, IsOrderBusinessUser]
+
+    def partial_update(self, request, *args, **kwargs):
+        # Nur 'status' ist erlaubt → zusätzliche Felder ergeben 400
+        allowed = {"status"}
+        extra_keys = set(request.data.keys()) - allowed
+        if extra_keys:
+            return Response(
+                {"detail": f"Only 'status' may be updated. Invalid fields: {', '.join(sorted(extra_keys))}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        # Vollständige Order-Repräsentation zurückgeben (Spec)
+        full = OrderOutputSerializer(instance)
+        return Response(full.data, status=status.HTTP_200_OK)
+
+    # Für DRF ruft PATCH -> partial_update; wir erzwingen partial=True auch für PUT-Schutz
+    def update(self, request, *args, **kwargs):
+        kwargs["partial"] = True
+        return self.partial_update(request, *args, **kwargs)
