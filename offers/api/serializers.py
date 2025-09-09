@@ -297,3 +297,16 @@ class OfferPatchSerializer(serializers.ModelSerializer):
 
         # Rückgabe der aktualisierten Instanz – die View serialisiert mit dem Voll-Serializer
         return instance
+    
+class OfferDetailFullSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OfferDetail
+        fields = [
+            "id",
+            "title",
+            "revisions",
+            "delivery_time_in_days",
+            "price",
+            "features",
+            "offer_type",
+        ]

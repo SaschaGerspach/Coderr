@@ -8,8 +8,8 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
 
-from offers.models import Offer
-from .serializers import OfferSerializer, OfferListSerializer, OfferDetailViewSerializer, OfferPatchSerializer
+from offers.models import Offer, OfferDetail
+from .serializers import OfferSerializer, OfferListSerializer, OfferDetailViewSerializer, OfferPatchSerializer, OfferDetailFullSerializer
 from .permissions import IsBusinessUser, IsOfferOwner
 
 
@@ -139,3 +139,11 @@ class OfferRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+
+class OfferDetailRetrieveAPIView(generics.RetrieveAPIView):
+    """
+    GET /api/offerdetails/{id}/
+    """
+    queryset = OfferDetail.objects.all()
+    serializer_class = OfferDetailFullSerializer
+    permission_classes = [IsAuthenticated]
