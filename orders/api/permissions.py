@@ -28,3 +28,9 @@ class IsOrderBusinessUser(BasePermission):
         prof = getattr(user, "profile", None)
         user_type = getattr(prof, "type", "") if prof else ""
         return user_type == "business" and obj.business_user_id == user.id
+    
+class IsAdminStaff(BasePermission):
+    message = "Only admin staff users may delete orders."
+
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and request.user.is_staff)

@@ -6,7 +6,7 @@ from rest_framework.exceptions import ValidationError
 
 from orders.models import Order
 from .serializers import OrderCreateSerializer, OrderOutputSerializer, OrderStatusPatchSerializer
-from .permissions import IsCustomerUser, IsOrderBusinessUser
+from .permissions import IsCustomerUser, IsOrderBusinessUser, IsAdminStaff
 
 
 class OrderListCreateAPIView(generics.ListCreateAPIView):
@@ -63,36 +63,37 @@ class OrderListCreateAPIView(generics.ListCreateAPIView):
         out = OrderOutputSerializer(order)
         return Response(out.data, status=status.HTTP_201_CREATED)
 
-class OrderStatusUpdateAPIView(generics.UpdateAPIView):
+class OrderDetailUpdateDeleteAPIView(generics.RetrieveUpdateDestroyAPIView):
     """
-    PATCH /api/orders/{id}/
-    - nur Status änderbar
-    - nur business_user dieser Order & Profil-Typ 'business'
+    PATCH /api/orders/<id>/  -> Status aktualisieren (nur business_user dieser Order)
+    DELETE /api/orders/<id>/ -> Löschen (nur Staff)
     """
     queryset = Order.objects.all().select_related("customer_user", "business_user")
-    serializer_class = OrderStatusPatchSerializer
-    permission_classes = [IsAuthenticated, IsOrderBusinessUser]
+
+    def get_permissions(self):
+        if self.request.method == "PATCH":
+            return [IsAuthenticated(), IsOrderBusinessUser()]
+        if self.request.method == "DELETE":
+            return [IsAuthenticated(), IsAdminStaff()]
+        return [IsAuthenticated()]  # falls GET jemals genutzt wird
+
+    def get_serializer_class(self):
+        if self.request.method == "PATCH":
+            return OrderStatusPatchSerializer
+        return OrderOutputSerializer
 
     def partial_update(self, request, *args, **kwargs):
-        # Nur 'status' ist erlaubt → zusätzliche Felder ergeben 400
+        # nur 'status' ist erlaubt
         allowed = {"status"}
-        extra_keys = set(request.data.keys()) - allowed
-        if extra_keys:
+        extra = set(request.data.keys()) - allowed
+        if extra:
             return Response(
-                {"detail": f"Only 'status' may be updated. Invalid fields: {', '.join(sorted(extra_keys))}."},
+                {"detail": f"Only 'status' may be updated. Invalid fields: {', '.join(sorted(extra))}."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
-
-        # Vollständige Order-Repräsentation zurückgeben (Spec)
-        full = OrderOutputSerializer(instance)
-        return Response(full.data, status=status.HTTP_200_OK)
-
-    # Für DRF ruft PATCH -> partial_update; wir erzwingen partial=True auch für PUT-Schutz
-    def update(self, request, *args, **kwargs):
-        kwargs["partial"] = True
-        return self.partial_update(request, *args, **kwargs)
+        # volle Order zurückgeben
+        return Response(OrderOutputSerializer(instance).data, status=status.HTTP_200_OK)
