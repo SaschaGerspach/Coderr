@@ -1,0 +1,97 @@
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.authtoken.models import Token
+from rest_framework.test import APITestCase
+
+from profiles.models import Profile
+from offers.models import Offer, OfferDetail
+from orders.models import Order
+
+User = get_user_model()
+
+
+def create_profile_with_type(user, t: str):
+    p = Profile.objects.create(user=user)
+    p.type = t
+    p.save(update_fields=["type"])
+    return p
+
+
+def add_offer_with_detail(owner, title="X", detail_title="Basic", price="50.00"):
+    offer = Offer.objects.create(owner=owner, title=title, description="desc")
+    detail = OfferDetail.objects.create(
+        offer=offer,
+        title=detail_title,
+        revisions=1,
+        delivery_time_in_days=3,
+        price=price,
+        features=["x"],
+        offer_type="basic",
+    )
+    return offer, detail
+
+
+def create_order(customer, business, detail, status_value):
+    return Order.objects.create(
+        customer_user=customer,
+        business_user=business,
+        offer_detail=detail,
+        title=detail.title,
+        revisions=detail.revisions,
+        delivery_time_in_days=detail.delivery_time_in_days,
+        price=detail.price,
+        features=detail.features,
+        offer_type=detail.offer_type,
+        status=status_value,
+    )
+
+
+class OrderCountTests(APITestCase):
+    def setUp(self):
+        # Auth-User (egal ob business/customer – Hauptsache eingeloggt)
+        self.viewer = User.objects.create_user("viewer", "viewer@example.com", "pass1234")
+        create_profile_with_type(self.viewer, "customer")
+        self.viewer_token = Token.objects.create(user=self.viewer)
+
+        # Business-User, für den gezählt wird
+        self.biz = User.objects.create_user("biz", "biz@example.com", "pass1234")
+        create_profile_with_type(self.biz, "business")
+
+        # Customer
+        self.cust = User.objects.create_user("cust", "cust@example.com", "pass1234")
+        create_profile_with_type(self.cust, "customer")
+
+        # Angebote & Orders
+        _, detail = add_offer_with_detail(self.biz)
+        create_order(self.cust, self.biz, detail, Order.Status.IN_PROGRESS)
+        create_order(self.cust, self.biz, detail, Order.Status.IN_PROGRESS)
+        create_order(self.cust, self.biz, detail, Order.Status.COMPLETED)  # soll NICHT gezählt werden
+
+        self.url = reverse("order-count", args=[self.biz.id])
+
+    def auth(self, token):
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+    def test_requires_auth_401(self):
+        res = self.client.get(self.url)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_counts_only_in_progress_200(self):
+        self.auth(self.viewer_token)
+        res = self.client.get(self.url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data, {"order_count": 2})
+
+    def test_404_if_user_not_exists(self):
+        self.auth(self.viewer_token)
+        bad = reverse("order-count", args=[999999])
+        res = self.client.get(bad)
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_404_if_user_not_business(self):
+        self.auth(self.viewer_token)
+        # viewer ist customer -> sollte 404 liefern
+        url = reverse("order-count", args=[self.viewer.id])
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)

@@ -1,4 +1,6 @@
 from django.db.models import Q
+from django.contrib.auth import get_user_model
+from rest_framework.views import APIView
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -8,6 +10,7 @@ from orders.models import Order
 from .serializers import OrderCreateSerializer, OrderOutputSerializer, OrderStatusPatchSerializer
 from .permissions import IsCustomerUser, IsOrderBusinessUser, IsAdminStaff
 
+User = get_user_model()
 
 class OrderListCreateAPIView(generics.ListCreateAPIView):
     """
@@ -97,3 +100,30 @@ class OrderDetailUpdateDeleteAPIView(generics.RetrieveUpdateDestroyAPIView):
         self.perform_update(serializer)
         # volle Order zurückgeben
         return Response(OrderOutputSerializer(instance).data, status=status.HTTP_200_OK)
+    
+
+class OrderCountAPIView(APIView):
+    """
+    GET /api/order-count/{business_user_id}/
+    Gibt {"order_count": <int>} zurück.
+    Auth erforderlich.
+    404, wenn kein Business-User mit der ID existiert.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, business_user_id: int):
+        try:
+            user = User.objects.select_related("profile").get(id=business_user_id)
+        except User.DoesNotExist:
+            return Response({"detail": "Business user not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Muss ein Business-Profil sein
+        prof = getattr(user, "profile", None)
+        if not prof or getattr(prof, "type", "") != "business":
+            return Response({"detail": "Business user not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        count = Order.objects.filter(
+            business_user_id=business_user_id,
+            status=Order.Status.IN_PROGRESS,
+        ).count()
+        return Response({"order_count": count}, status=status.HTTP_200_OK)
