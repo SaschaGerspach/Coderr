@@ -15,3 +15,11 @@ class IsCustomerReviewer(BasePermission):
             return False
         prof = getattr(user, "profile", None)
         return getattr(prof, "type", "") == "customer"
+
+
+class IsReviewOwner(BasePermission):
+    message = "Only the review owner may modify this review."
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        return bool(user and user.is_authenticated and obj.reviewer_id == user.id)

@@ -6,8 +6,8 @@ from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 
 from reviews.models import Review
-from .serializers import ReviewCreateSerializer, ReviewOutputSerializer
-from .permissions import IsCustomerReviewer
+from .serializers import ReviewCreateSerializer, ReviewOutputSerializer, ReviewPatchSerializer
+from .permissions import IsCustomerReviewer, IsReviewOwner
 
 User = get_user_model()
 
@@ -69,3 +69,44 @@ class ReviewListCreateAPIView(generics.ListCreateAPIView):
         review = serializer.save()
         out = ReviewOutputSerializer(review)
         return Response(out.data, status=status.HTTP_201_CREATED)
+
+
+class ReviewDetailUpdateDeleteAPIView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    PATCH /api/reviews/{id}/  -> nur rating/description (nur Owner)
+    DELETE /api/reviews/{id}/ -> nur Owner
+
+    """
+    queryset = Review.objects.all().select_related("business_user", "reviewer")
+    permission_classes = [IsAuthenticated, IsReviewOwner]
+    
+    def get_serializer_class(self):
+        if self.request.method == "PATCH":
+            return ReviewPatchSerializer
+        return ReviewOutputSerializer
+
+    def partial_update(self, request, *args, **kwargs):
+        # Nur diese Keys sind erlaubt:
+        allowed = {"rating", "description"}
+        extra = set(request.data.keys()) - allowed
+        if extra:
+            return Response(
+                {"detail": f"Only 'rating' and 'description' may be updated. Invalid: {', '.join(sorted(extra))}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(ReviewOutputSerializer(instance).data, status=status.HTTP_200_OK)
+
+    # PATCH ruft update(); wir erzwingen partial=True
+    def update(self, request, *args, **kwargs):
+        kwargs["partial"] = True
+        return self.partial_update(request, *args, **kwargs)
+    
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)

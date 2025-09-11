@@ -67,3 +67,9 @@ class ReviewOutputSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+
+class ReviewPatchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Review
+        fields = ["rating", "description"] 
