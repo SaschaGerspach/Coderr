@@ -63,7 +63,7 @@ pip install -r requirements.txt
 python manage.py migrate
 
 # 4. Create guest accounts (if not already existing)
-python manage.py create_guest_users
+python manage.py seed_guest_users
 
 # 5. Start development server
 python manage.py runserver
