@@ -51,19 +51,37 @@ Backend for **Coderr**: Businesses publish offers, customers order them, busines
 
 ##  Quickstart (Development)
 
+### 1. Virtual environment
 ```bash
-# 1. Virtual environment
 python -m venv .venv
-. .venv/bin/activate  # Windows: .venv\Scripts\activate
+```
 
-# 2. Install dependencies
+### 2. Activate env
+#### 2.1 Windows
+```bash
+.venv\Scripts\activate
+```
+#### 2.2 Mac/Linux
+```bash
+.venv/bin/activate
+```
+
+### 3. Install dependencies
+```bash
 pip install -r requirements.txt
+```
 
-# 3. Run migrations
+### 4. Run migrations
+```bash
 python manage.py migrate
+```
 
-# 4. Create guest accounts (if not already existing)
+### 5. Create guest accounts (if not already existing)
+```bash
 python manage.py seed_guest_users
+```
 
-# 5. Start development server
+### 6. Start development server
+```bash
 python manage.py runserver
+```
