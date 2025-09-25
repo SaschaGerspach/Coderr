@@ -25,9 +25,9 @@ SECRET_KEY = 'django-insecure-!#lfjuv(8o$_j3yeh(+5rau5c@ooxps_sjf)8-ipnp8p(vmd-#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = [".sascha-gerspach.de", "sascha-gerspach.de", "35.198.103.133", "localhost", "127.0.0.1" ]
+ALLOWED_HOSTS =["coderr.api.sascha-gerspach.de", ".sascha-gerspach.de", "sascha-gerspach.de", "35.198.103.133", "localhost", "127.0.0.1" ]
 
-CSRF_TRUSTED_ORIGINS = [ "https://sascha-gerspach.de", "https://api.coderr.sascha-gerspach.de", "http://35.198.103.133", "https://35.198.103.133"]
+CSRF_TRUSTED_ORIGINS = ["https://coderr.api.sascha-gerspach.de", "https://sascha-gerspach.de", "https://api.coderr.sascha-gerspach.de", "https://35.198.103.133"]
 
 # Application definition
 
